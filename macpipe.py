@@ -146,6 +146,7 @@ def send_ethernet_frame(destination_mac, source_mac, payload, iface):
     sendp(frame, iface=iface,verbose=False)
     
 
+
 def receive_ethernet_frames(iface, filter_function=None, timeout=10):
     """
     Receives Ethernet frames.
@@ -159,7 +160,7 @@ def receive_ethernet_frames(iface, filter_function=None, timeout=10):
         List of received packets.
     """
     global g_my_macsec_interface
-    # print(f"Listening for frames on interface {iface}...")
+    global mac_key_store
     
     def process_packet(packet):
         # Print the summary of the packet
@@ -174,22 +175,13 @@ def receive_ethernet_frames(iface, filter_function=None, timeout=10):
                 if decrypted_payload is not None:
                     split_payload = decrypted_payload.split(",")
                     g_my_mac_address = get_mac_address(g_my_macsec_interface)
+                    received_mac = split_payload[1]
+                    received_key = split_payload[2]
+                    
                     # Check that received mac address is not my own
-                    if split_payload[1] != g_my_mac_address:
-                        stored_item_count=len(mac_key_store)
-                        if stored_item_count == 0: 
-                            print(f"Initial update, mac: {split_payload[1]}  key: {split_payload[2]}")
-                            update_encryption_key(split_payload[1], split_payload[2])
+                    if received_mac != g_my_mac_address:
+                        if update_encryption_key( received_mac, received_key ) :
                             execute_remote_macsec()
-                        
-                        for mac, key in get_all_items():
-                            if split_payload[1] == mac and split_payload[2] == key:
-                                # We have this key and mac pair
-                                pass
-                            else:
-                                print(f"Updating key {split_payload[2]} for {split_payload[1]}")
-                                update_encryption_key(split_payload[1], split_payload[2])
-                                execute_remote_macsec()
                     else:
                         pass
                         
@@ -203,6 +195,37 @@ def receive_ethernet_frames(iface, filter_function=None, timeout=10):
     packets = sniff(iface=iface, filter="ether broadcast", prn=process_packet, timeout=timeout)
     return packets
 
+
+def update_encryption_key(mac_address, encryption_key):
+    """
+    Updates the encryption key for the given MAC address.
+    If mac is new, adds mac and key => returns 1
+    If the MAC address exists and key differes => updates its key and returns 1
+    If the MAC address exists and key is same => returns 0
+
+    Args:
+        mac_address (str): The MAC address.
+        encryption_key (str): The encryption key.
+    
+    Returns:
+        0 if changes were not made
+        1 if there is changes
+    """
+    global mac_key_store
+    for item in mac_key_store:
+        if item[0] == mac_address and item[1] != encryption_key:
+            # mac address is found, but encryption key has changed
+            print(f"New key for: {mac_address}")
+            item[1] = encryption_key  
+            return 1
+        if item[0] == mac_address:
+            return 0
+    
+    # If MAC address not found, add a new entry
+    print(f"New mac and key: {mac_address}")
+    mac_key_store.append([mac_address, encryption_key])
+    return 1
+    
 #
 # Encrypt / decrypt functions 
 #
@@ -469,7 +492,7 @@ def write_shell_script(file_name):
 def init_my_macsec():
     global g_my_macsec_key
     g_my_macsec_key = generate_encryption_key(128)    
-    print("Executing init my macsec command sequence")
+    print("Initializing my macsec interface")
     shell_command(f"ip link set {g_my_macsec_interface} up ")
     shell_command("ip link delete macsec0 ")
     shell_command(f"ip link add link {g_my_macsec_interface} macsec0 type macsec encrypt on ")
@@ -480,31 +503,14 @@ def init_my_macsec():
 
 def execute_remote_macsec():
     global g_my_macsec_key
-    print("Executing macsec command sequence after receiving remotes")
+    print("Activating new peer for interface")
     for mac, key in get_all_items():
         shell_command(f"ip macsec del macsec0 rx port 1 address {mac} ")
         shell_command(f"ip macsec add macsec0 rx port 1 address {mac} ")
         shell_command(f"ip macsec add macsec0 rx port 1 address {mac} sa 0 pn 1 on key 00 {key} ")
 
 
-def update_encryption_key(mac_address, encryption_key):
-    """
-    Updates the encryption key for the given MAC address.
-    If the MAC address exists, updates its key. Otherwise, adds a new entry.
 
-    Args:
-        mac_address (str): The MAC address.
-        encryption_key (str): The encryption key.
-    """
-    global mac_key_store
-    for item in mac_key_store:
-        if item[0] == mac_address:
-            item[1] = encryption_key  # Update the encryption key
-            print(f"Updated encryption key for MAC: {mac_address}")
-            return
-    # If MAC address not found, add a new entry
-    mac_key_store.append([mac_address, encryption_key])
-    print(f"Added new MAC and encryption key: {mac_address}, {encryption_key}")
 
 def get_all_items():
     """
@@ -562,9 +568,6 @@ if __name__ == "__main__":
         if args.receive:
             while True:
                 frame_receiver()
-                # Debug stored keys
-                # for mac, key in get_all_items():
-                #     print(f"MAC: {mac} KEY: {key}")        
                 time.sleep(1)
             
         if args.send:
