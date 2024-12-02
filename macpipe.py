@@ -88,7 +88,7 @@ def check_root_privileges():
         print("This script must be run as root!")
         sys.exit(1)
     else:
-        print("Script is running with root privileges.")
+        pass
     
 def run_sudo_command(command: str) -> str:
     """
@@ -492,7 +492,7 @@ def write_shell_script(file_name):
 def init_my_macsec():
     global g_my_macsec_key
     g_my_macsec_key = generate_encryption_key(128)    
-    print("Initializing my macsec interface")
+    print("Initializing macsec interface. Remember to restart receiver as well (-r).")
     shell_command(f"ip link set {g_my_macsec_interface} up ")
     shell_command("ip link delete macsec0 ")
     shell_command(f"ip link add link {g_my_macsec_interface} macsec0 type macsec encrypt on ")
@@ -503,14 +503,10 @@ def init_my_macsec():
 
 def execute_remote_macsec():
     global g_my_macsec_key
-    print("Activating new peer for interface")
     for mac, key in get_all_items():
         shell_command(f"ip macsec del macsec0 rx port 1 address {mac} ")
         shell_command(f"ip macsec add macsec0 rx port 1 address {mac} ")
         shell_command(f"ip macsec add macsec0 rx port 1 address {mac} sa 0 pn 1 on key 00 {key} ")
-
-
-
 
 def get_all_items():
     """
