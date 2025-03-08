@@ -10,13 +10,10 @@ my_interface=enp0s31f6
 shared_secret=11223344
 ```
 
-Then run with option `-s` and after this second instance with `-r` option.
+Then execute macpipe.py:
 
 ```
-# First run 'sender'
-sudo python3 macpipe.py -s
-# Then run 'receiver' 
-sudo python3 macpipe.py -r
+sudo python3 macpipe.py
 ```
 
 ## prerequisites
