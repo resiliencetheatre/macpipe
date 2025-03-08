@@ -29,18 +29,7 @@
 #
 #  sudo apt install python3-scapy python3-cryptography
 #
-# Unused features:
-# 
-# * Reads fifo to encrypt/decrypt payload and writes result to fifo
-#
-# Remember you need to read fifo output (unused feature):
-#
-#  cat /tmp/encrypted_message
-#  cat /tmp/decrypted_message
-#
-#  BOLD: \033[1m \033[0m
-#  RED: \033[31m \033[0m
-#
+
 import os
 import sys
 import time
@@ -66,10 +55,6 @@ from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
 # Read ini file
 config = configparser.ConfigParser()
 config.read('macpipe.ini')
-g_fifo_decrypt_in = config['settings']['decrypt_fifo_in']
-g_fifo_decrypt_out = config['settings']['decrypt_fifo_out']
-g_fifo_encrypt_in = config['settings']['encrypt_fifo_in']
-g_fifo_encrypt_out = config['settings']['encrypt_fifo_out']
 g_my_macsec_address = config['settings']['my_address']
 g_my_macsec_interface = config['settings']['my_interface']
 g_password = config['settings']['shared_secret']
@@ -295,81 +280,7 @@ def decrypt_aes256(encoded_data: str, password: str) -> str:
         pass
         # print("Decrypt error.")
 
-# FIFO functions
-def create_fifo_pipe(pipe_path):
-    try:
-        os.mkfifo(pipe_path)
-        print(f"FIFO created {pipe_path}" )
-        
-    except OSError as e:
-        pass
-        # print(f"Error: {e}")
 
-def write_encrypted_message_to_fifo(message):
-    global g_fifo_encrypt_out
-    fifo_write = open(g_fifo_encrypt_out, 'w')
-    fifo_write.write(message + "\n") # NOTE: \n
-    fifo_write.flush()
-    fifo_write.close()
-
-def write_decrypted_message_to_fifo(message):
-    global g_fifo_decrypt_out
-    fifo_write = open(g_fifo_decrypt_out, 'w')
-    fifo_write.write(message + "\n") # NOTE: \n
-    fifo_write.flush()
-    fifo_write.close()
-
-def read_fifo_for_encryption():
-    global g_fifo_encrypt_in
-    
-    if not os.path.isfile(g_fifo_encrypt_in):
-        create_fifo_pipe(g_fifo_encrypt_in)
-    if not stat.S_ISFIFO(os.stat(g_fifo_encrypt_in).st_mode):
-        os.remove(g_fifo_encrypt_in)
-        create_fifo_pipe(g_fifo_encrypt_in)
-    
-    if not os.path.isfile(g_fifo_encrypt_out):
-        create_fifo_pipe(g_fifo_encrypt_out)
-    if not stat.S_ISFIFO(os.stat(g_fifo_encrypt_out).st_mode):
-        os.remove(g_fifo_encrypt_out)
-        create_fifo_pipe(g_fifo_encrypt_out)
-    
-    fifo_read=open(g_fifo_encrypt_in,'r')
-    
-    while True:
-        fifo_msg_in = fifo_read.readline()[:-1]
-
-        if not fifo_msg_in == "":
-            encrypted_payload = encrypt_aes256(fifo_msg_in, g_password)
-            write_encrypted_message_to_fifo(encrypted_payload)
-        else:
-            time.sleep(1)
-
-
-def read_fifo_for_decryption():
-    global g_fifo_decrypt_in
-    if not os.path.isfile(g_fifo_decrypt_in):
-        create_fifo_pipe(g_fifo_decrypt_in)
-    if not stat.S_ISFIFO(os.stat(g_fifo_decrypt_in).st_mode):
-        os.remove(g_fifo_decrypt_in)
-        create_fifo_pipe(g_fifo_decrypt_in)
-        
-    if not os.path.isfile(g_fifo_decrypt_out):
-        create_fifo_pipe(g_fifo_decrypt_out)
-    if not stat.S_ISFIFO(os.stat(g_fifo_decrypt_out).st_mode):
-        os.remove(g_fifo_decrypt_out)
-        create_fifo_pipe(g_fifo_decrypt_out)
-        
-    fifo_read=open(g_fifo_decrypt_in,'r')
-
-    while True:
-        fifo_msg_in = fifo_read.readline()[:-1]
-        if not fifo_msg_in == "":
-            # print(f'Input: {fifo_msg_in}')
-            decrypted_payload = decrypt_aes256(fifo_msg_in, g_password)
-            write_decrypted_message_to_fifo(decrypted_payload)
-        else:
-            time.sleep(1)
 
 def get_mac_address(interface_name):
     """
@@ -422,19 +333,7 @@ def generate_encryption_key(bit_length=128):
     
     return hex_key
 
-#
-# Run as encrypt
-#
-def encrypt():
-    read_fifo_for_encryption()
-    sys.exit()
-        
-#
-# Run as decrypt
-#
-def decrypt():
-    read_fifo_for_decryption()
-    sys.exit()
+
 
 #
 # Ethernet frame functions
